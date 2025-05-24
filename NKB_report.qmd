@@ -1,0 +1,450 @@
+---
+title: "NKB  entry report analysis Apr 2025"
+author: "y_bib"
+format: pdf
+editor: visual
+---
+### Outlines of NKB swimmers' performance
+## Introduction
+There is a very well known fact that male swimmers swim faster than female swimmers. And there is a well known fact that Canadian female swimmers win sufficiently more  Olympic medals compared to male swimmers. 
+
+We will check what are the trends in the Ottawa biggest swimming club named NKB. And ALSO see how age and style preferences effect results. To (possibly:)  predict our future winners we will cluster swimmers based on all their results (properly normalized) and see who appeared in the first cluster (but no names here :)).
+
+Data source: NKB SwimMeets Apr 2025 entry report (1470 records, 233 swimmers)
+(other entry reports soon to be added.)
+
+## Stats you will see
+
+-   Gender and age structure of NKB swimmers
+
+-   Distance and Style assigned to age groups
+
+-   Best and mean times among styles, gender & age groups
+
+-   Clasterization of swimmers based on their best time results
+
+## Methods
+
+Raw data organization; descriptive statistics; scaling and commutative description for clustering.
+
+## Results
+
+```{r}
+#| message: false
+#| warning: false
+#| include: false
+
+#loading libraries
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(ggpmisc)
+library(patchwork)
+library(descr)
+library(stringr) # for formatting input data - working with strings
+library(pdftools) # reading pdf file
+# library(lubridate) handling datas ant time - did not use it
+library(dbscan) # for clustering
+library(tidyr)
+library(pivottabler) # for pivot tables
+library(gt) # tables
+
+```
+
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+#First part of code: reading raw data, organizing data, correcting error 
+
+#reading raw date from NKB entry reports
+swim_r <- read.delim(file = 'rare_data/11apr2025.txt', header = FALSE, sep =
+                       "\t")
+swim <- data.frame(
+  Name = character(),
+  Age = numeric(),
+  EventNumber = character(),
+  Gender = character(),
+  AgeGroup = character(),
+  Style = character(),
+  Time = character(),
+  Distance = character(),
+  Type = character(),
+  stringsAsFactors = FALSE
+)
+
+tmp_name <- ""
+tmp_age <- NA
+time <- NA
+type <- NA
+
+Nr <- nrow(swim_r)
+
+i <- 1
+for (i in 1:Nr) {
+  if (str_detect(swim_r[i, 1], '#'))
+    #(grepl("^# ", swim_r[i,1]))
+  {
+    # Extract event details
+    
+    event_parts <- unlist(strsplit(gsub(" *& *", "&", sub("# ", "", swim_r[i, 1])), " ", fixed = TRUE))
+    # Combine multi-word event names
+    event_name <- paste(event_parts[5:(length(event_parts) - 1)], collapse = " ")
+    tm <- str_sub(event_parts[length(event_parts)], end = nchar(event_parts[length(event_parts)]))
+    if (tm == "NT")
+    {
+      time <- NA
+      type <- NA
+    }
+    else{
+      time = str_sub(event_parts[length(event_parts)], end = nchar(event_parts[length(event_parts)]) -
+                       1)
+      type = str_sub(event_parts[length(event_parts)], -1)
+    }
+    
+    swim <- rbind(
+      swim,
+      data.frame(
+        Name = tmp_name,
+        Age = tmp_age,
+        EventNumber = event_parts[1],
+        Gender = event_parts[2],
+        AgeGroup = event_parts[3],
+        Distance = event_parts[4],
+        Style = event_name,
+        Time = time,
+        Type = type,
+        stringsAsFactors = FALSE
+      )
+    )
+  } else
+    if (str_detect(swim_r[i, 1], ','))
+      #& str_detect(swim_r[i,1], '(')&str_detect(swim_r[i,1], ')'))
+    {
+      # Extract name and age
+      name_age <- sub("\\)", "", swim_r[i, 1])
+      parts <- unlist(strsplit(name_age, " \\("))
+      tmp_name <- parts[1]
+      tmp_age <- as.numeric(parts[2])
+    }
+}
+names_factor <- c("Age", "Gender", "AgeGroup", "Type", "Style", "Distance")
+swim[names_factor] <- lapply(swim[names_factor], as.factor)
+
+
+#define function which convert reported time to seconds
+time_to_sec <- function(arg1) {
+  tt <- unlist(str_split((arg1), ":"), " ")
+  if (length(tt) == 1)
+    result <- as.numeric(arg1)
+  else
+    result <- as.numeric(tt[1]) * 60 + as.numeric(tt[2])
+  return(result)
+}
+
+#we add  a new column Seconds to data set swim which contains time as number counted in seconds
+
+swim <- swim %>%
+  mutate(Seconds = sapply(Time, time_to_sec))
+
+#Correcting input mistake
+swim[swim$Style == "Free X", "Style"] <- "Free"
+swim$Style <- droplevels(swim$Style)
+
+#ordered levels for Distance  Gender Style
+swim$Distance <- factor(swim$Distance, levels = c("50", "100", "200", "400", "800", "1500"))
+swim$Gender <- factor(swim$Gender, levels = c("Male", "Female"))
+swim$Style <- factor(swim$Style, levels = c("Breast", "Back", "Free", "Fly", "IM"))
+```
+
+Gender and age structure of NKB Assigned style&distance to swimmers of different age groups
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| include: false
+
+#Pivot table to see gender and age structure of NKB
+# Group and summarize
+summary1 <- swim %>%
+  group_by(AgeGroup, Gender) %>%
+  summarise(TotalSwimmers = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = Gender,
+                     values_from = TotalSwimmers,
+                     values_fill = 0)
+
+# Display using gt
+summary1 %>%
+  gt() %>%
+  tab_header(title = "Total Swimmers by Age Group and Gender")
+
+# Group and summarize
+summary2 <- swim %>%
+  group_by(AgeGroup, Distance, Style) %>%
+  summarise(TotalSwimmers = n(), .groups = "drop") %>%
+  tidyr::pivot_wider(names_from = AgeGroup,
+                     values_from = TotalSwimmers,
+                     values_fill = 0)
+
+# Display using gt
+summary2 %>%
+  gt() %>%
+  tab_header(title = "Total Swimmers by Age Group, Distance, and Style")
+
+```
+The picture shows what style is the fastest among NKB swimmers (for the same distance): columns show mean time (average time among each gender) and points show the best time.
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#First naive research: what style is the fastest among NKB swimmers (for the same distance)
+#note Type field must be filtered because Time counts differently for L ans S distances
+
+#Mean time in seconds (histogram), best time in seconds (points) ,
+#50 m, Males and Females are drawn separately
+filter(swim, Type == "L" & Distance == 50) %>%
+  ggplot(aes(x = Style, y = Seconds, color = Gender)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    fill = "white",
+    position = position_dodge()
+  ) +
+  stat_summary(
+    fun = min,
+    geom = "point",
+    size = 3,
+    position = position_dodge(0.8)
+  ) +
+  labs(x = "Style of swimming", y = "Mean time in seconds for 50m") +
+  theme_bw()
+
+
+#Mean time in seconds (histogram), best time in seconds (points) ,
+#100 m, Males and Females are drawn separately
+filter(swim, Type == "L" & Distance == 100) %>%
+  ggplot(aes(x = Style, y = Seconds, color = Gender)) +
+  stat_summary(
+    fun = median,
+    geom = "col",
+    fill = "white",
+    position = position_dodge()
+  ) +
+  stat_summary(
+    fun = min,
+    geom = "point",
+    size = 3,
+    position = position_dodge(0.8)
+  ) +
+  labs(x = "Style of swimming", y = "Mean time in seconds for 100m") +
+  theme_bw()
+
+
+#Mean time in seconds (histogram), best time in seconds (points) ,
+#200 m, Males and Females are drawn separately
+filter(swim, Type == "L" & Distance == 200) %>%
+  ggplot(aes(x = Style, y = Seconds, color = Gender)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    fill = "white",
+    position = position_dodge()
+  ) +
+  stat_summary(
+    fun = min,
+    geom = "point",
+    size = 3,
+    position = position_dodge(0.8)
+  ) +
+  labs(x = "Style of swimming", y = "Mean time in seconds for 200m") +
+  theme_bw()
+
+
+#Mean time in seconds (histogram), best time in seconds (points) ,
+#400 m, Males and Females are drawn separately
+filter(swim, Type == "L" & Distance == 400) %>%
+  ggplot(aes(x = Style, y = Seconds, color = Gender)) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    fill = "white",
+    position = position_dodge()
+  ) +
+  stat_summary(
+    fun = min,
+    geom = "point",
+    size = 3,
+    position = position_dodge(0.8)
+  ) +
+  labs(x = "Style of swimming", y = "Mean time in seconds for 400m") +
+  theme_bw()
+
+
+```
+Conclusion: We see that boy show better results though free style allow girls to minimize the  gap.
+In terms of of age groups distribution Free style works better for time results though NKB has at least two exceptional swimmers on back.  
+
+Now let us see box plots (best) time per Style, both genders together, 100m  (very popular distance!)
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+#Best time per Style, both genders together, 100m
+filter(swim, Type == "L" & Distance == 100) %>%
+  ggplot(aes(x = AgeGroup, y = Seconds, color = Style)) +
+  stat_summary(
+    fun = min,
+    geom = "point",
+    size = 3,
+    position = position_dodge(0.2)
+  ) +
+  labs(x = "Age group", y = "The best time among swimmers, 100m") +
+  theme_bw()
+
+```
+
+And below the distribution of swimmers' results for various distances is presented.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+filter(swim, Type == "L" & as.numeric(as.character(Distance)) < 210) %>%
+  ggplot(aes(x = Distance, y = Seconds, color = Style)) +
+  geom_boxplot() +
+  labs(x = "Distance", y = "Times (faster is better)") +
+  theme_bw()
+
+
+filter(swim,
+       Type == "L" &
+         as.numeric(as.character(Distance)) > 210 &
+         as.numeric(as.character(Age)) > 14) %>%
+  ggplot(aes(x = Distance, y = Seconds, color = Gender)) +
+  geom_boxplot() +
+  labs(x = "Distance", y = "Times (faster is better)") +
+  theme_bw()
+
+
+filter(swim,
+       Type == "L" &
+         as.numeric(as.character(Distance)) < 210 &
+         as.numeric(as.character(Age)) < 11) %>%
+  ggplot(aes(x = Distance, y = Seconds, color = Gender)) +
+  geom_boxplot() +
+  labs(x = "Distance", y = "Times (faster is better)") +
+  theme_bw()
+
+ 
+```
+
+Clustering based on the best results. All results are normalized first within the distance&style. Of course we can cluster swimmers within specific age group or oone gender but let us see who appers in the most productive group of all ages and both genders.
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+#Since we need to repeat clustering and vizualization several times, we will make a simple very specialized function for our reports
+
+
+swim_wide <- swim %>% #filter(Gender == "Female") %>% # we may cluster only male or only female swimmers
+  mutate(EventLabel = paste0(Distance, Style)) %>%  # like "100Free", "50Breast"
+  select(Name, Age, AgeGroup, Gender, EventLabel, Seconds) %>%
+  pivot_wider(names_from = EventLabel,
+              values_from = Seconds,
+              values_fn = min)
+
+swim_wide_sc <- as.data.frame(scale(swim_wide[, -c(1, 2, 3, 4)], center = TRUE, scale = TRUE))
+# swim_wide_sc$Gender<-swim_wide$Gender
+# swim_wide_sc$AgeGroup<-swim_wide$AgeGroup
+# summary(swim_wide_sc)
+
+swim_wide_sc$MinValue <- apply(swim_wide_sc[, -c(1, 2, 3, 4)], 1, min, na.rm = TRUE)
+swim_wide_sc$MeanValue <- apply(swim_wide_sc[, -c(1, 2, 3, 4)], 1, mean, na.rm = TRUE)
+swim_wide_sc$Q1Value <- apply(swim_wide_sc[, -c(1, 2, 3, 4)], 1, function(x)
+  quantile(x, probs = 0.25, na.rm = TRUE))
+
+swim_wide_sc[, c("MinValue", "MeanValue", "Q1Value")] <- lapply(swim_wide_sc[, c("MinValue", "MeanValue", "Q1Value")], function(x) {
+  x[x == Inf] <- 3
+  x
+})
+
+#clustering applied to min of normalized and mean of normalized seconds
+cl <- kmeans(swim_wide_sc[, c("Q1Value", "MinValue")], centers = 5, trace = FALSE)
+
+# sortig cluster umbers
+original_labels <- cl$cluster
+centroids <- cl$centers
+sorted_order <- order(centroids[, 1])
+
+label_map <- setNames(seq_along(sorted_order), sorted_order)
+sorted_labels <- label_map[as.character(original_labels)]
+
+#visualization of clusters
+ggplot(swim_wide_sc, aes(
+  x = Q1Value,
+  y = MinValue,
+  color =    factor(sorted_labels)
+)) +
+  geom_point(size = 2) +
+  labs(x = "Q1 normalized", y = "Min normalizes") +
+  theme_bw()
+ 
+```
+The table below compares best (minimal) time and Q1 for combinations of distance&style
+
+```{r, dev='png'}
+#| echo: false
+#| message: false
+#| warning: false
+
+# numbers of rows that appeared in the first cluster
+rows_cluster1 <- which(sorted_labels == 1)
+
+#select rows that appeared in the first cluster
+swim_wide_cluster1 <- swim_wide[rows_cluster1, ]
+#number of swimmers appeared in the first cluster
+# Create table
+tab <- table(swim_wide_cluster1$Gender, swim_wide_cluster1$AgeGroup)
+
+# Convert to data frame and prepare for gt
+tab_df <- as.data.frame.matrix(tab)
+tab_df <- tibble::rownames_to_column(tab_df, var = "Gender")
+
+# Render with gt
+tab_df %>%
+  gt() %>%
+  tab_header(title = "Swimmer Count in Cluster 1 by Gender and Age Group")
+s_all <- summary(swim_wide)
+s_all <- unlist(s_all)[c(1, 2), -c(1, 2, 3, 4)]
+s_cluster <- summary(swim_wide[rows_cluster1, ])
+s_cluster <- unlist(s_cluster)[c(1, 2), -c(1, 2, 3, 4)]
+
+ 
+```
+
+And below a more technical table that shows normalized minimal values and first quartils amond all swimmers and among the Cluster 1.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# summary table will contain stats for all swimmers and for cluster 1
+summary_table <- rbind(s_all, s_cluster)
+summary_table_t <- t(summary_table)
+
+#report table indicating best (min) time
+# and Q1 among all swimmers and among the swimmers appeared in the first cluster
+
+colnames(summary_table_t) <- c("All_min", "All_Q1", "Cl1_min", "Cl1_Q1")
+summary_table_t <- tibble::rownames_to_column(as.data.frame(summary_table_t), var = "RowName")
+
+gt(as_tibble(summary_table_t))
+```
+
