@@ -1,33 +1,52 @@
 ---
 title: "NKB  entry report analysis Apr 2025"
 author: "y_bib"
-format: pdf
+format:
+  pdf:
+    include-in-header: 
+      text: |
+        \usepackage{float}
+        
 editor: visual
 ---
-### Outlines of NKB swimmers' performance
-## Introduction
-There is a very well known fact that male swimmers swim faster than female swimmers. And there is a well known fact that Canadian female swimmers win sufficiently more  Olympic medals compared to male swimmers. 
 
-We will check what are the trends in the Ottawa biggest swimming club named NKB. And ALSO see how age and style preferences effect results. To (possibly:)  predict our future winners we will cluster swimmers based on all their results (properly normalized) and see who appeared in the first cluster (but no names here :)).
+# Outlines of NKB swimmers' performance
+
+### Introduction
+
+There is a very well-known fact that male swimmers swim faster than female swimmers. And there is a well known fact that Canadian female swimmers win sufficiently more Olympic medals compared to male swimmers.
+
+We will check what are the trends in the Ottawa biggest chieldrem swimming club named NKB. And also see how age and style preferences effect results. To (possibly:) predict our future winners we will cluster swimmers based on all their results (properly normalized) and see who appeared in the first cluster (but no names here :)).
 
 Data source: NKB SwimMeets Apr 2025 entry report (1470 records, 233 swimmers)
-(other entry reports soon to be added.)
 
-## Stats you will see
+Tools: R for data manipulations, Quarto for report creation
+
+### Stats you will see
 
 -   Gender and age structure of NKB swimmers
 
--   Distance and Style assigned to age groups
+-   Plots and box plots describing performance depending on gender, style, distance and their combinations
 
--   Best and mean times among styles, gender & age groups
+-   Clastering of swimmers based on their best time results
 
--   Clasterization of swimmers based on their best time results
+-   Hypothesis testing using Shapiro test, Mann-Whitney U test, Permutation test.
 
-## Methods
+### Outlines:
 
-Raw data organization; descriptive statistics; scaling and commutative description for clustering.
+-   **Gender and Age Structure:** The club has a diverse age range, with swimmers from "10 & Under" to "15 & Over". Male and females swimmers present in all age groups. See **Part 1**.
 
-## Results
+-   **Distance and Style Preferences:** Distances of 400m and more are predominantly assigned to older swimmers (12+), while 50m distances are for younger swimmers (12 and under), with the exception of 50m Free style. 100m Free style is a very popular combination.
+
+-   **Free style** consistently appears to be the fastest swimming style across all distances. Part 1.
+
+-   **Clustering** of scaled data allows to find the better performing swimmers among all ages.
+
+-   **Male swimmers generally exhibit better average and best times across most distances and styles.** That concluded based on **clustering**: The top performance cluster contains significantly more male swimmers (19 in "15 & Over") compared to female swimmers (5 in "15 & Over") - see **Part 2** for details. Series of **hypotheses** testing support the same conclusion - see **Part 3** for details.
+
+### Methods
+
+Raw data organization; descriptive statistics; scaling and commutative description for clustering, Shapiro test, permutation test, Mann-Whitney U test.
 
 ```{r}
 #| message: false
@@ -50,7 +69,6 @@ library(pivottabler) # for pivot tables
 library(gt) # tables
 
 ```
-
 
 ```{r}
 #| echo: false
@@ -159,14 +177,17 @@ swim$Gender <- factor(swim$Gender, levels = c("Male", "Female"))
 swim$Style <- factor(swim$Style, levels = c("Breast", "Back", "Free", "Fly", "IM"))
 ```
 
-Gender and age structure of NKB Assigned style&distance to swimmers of different age groups
+## Part 1
+
+Gender and age structure of NKB swimmers.
 
 ```{r}
 #| echo: false
 #| message: false
 #| warning: false
-#| include: false
+#| results: 'asis'
 
+  
 #Pivot table to see gender and age structure of NKB
 # Group and summarize
 summary1 <- swim %>%
@@ -177,9 +198,26 @@ summary1 <- swim %>%
                      values_fill = 0)
 
 # Display using gt
-summary1 %>%
+tab <- summary1 %>%
   gt() %>%
   tab_header(title = "Total Swimmers by Age Group and Gender")
+  
+
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
+
+#gtsave(tab, "total_swimers.png",vwidth = 800, zoom = 1)
+#![Table: Total Swimmers by Age Group and Gender1](total_swimers.png){width=60%}
+```
+
+The table below shows what combinations of distance and style are assigned to the swimmers belonging to different age groups. Distances 400m and more are mostly assigned to the swimmers 12 y.o. and older while 50m distances are assigned younger swimmers (12 y.o. or younger) with the exception for 50 m Free style. One more popular combination is 100 m Free style.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: 'asis'
 
 # Group and summarize
 summary2 <- swim %>%
@@ -190,16 +228,22 @@ summary2 <- swim %>%
                      values_fill = 0)
 
 # Display using gt
-summary2 %>%
+tab <- summary2 %>%
   gt() %>%
   tab_header(title = "Total Swimmers by Age Group, Distance, and Style")
 
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
 ```
-The picture shows what style is the fastest among NKB swimmers (for the same distance): columns show mean time (average time among each gender) and points show the best time.
-```{r}
+
+The diagrams below show male and female NKB swimmers performing in different combinations of distance and style. On each diagram, the columns show mean time (average time among each gender,) and points show the best time depending on style and gender for the chosen distance.
+
+```{r, as.is=TRUE}
 #| echo: false
 #| message: false
 #| warning: false
+
 #First naive research: what style is the fastest among NKB swimmers (for the same distance)
 #note Type field must be filtered because Time counts differently for L ans S distances
 
@@ -221,8 +265,12 @@ filter(swim, Type == "L" & Distance == 50) %>%
   ) +
   labs(x = "Style of swimming", y = "Mean time in seconds for 50m") +
   theme_bw()
+```
 
-
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
 #Mean time in seconds (histogram), best time in seconds (points) ,
 #100 m, Males and Females are drawn separately
 filter(swim, Type == "L" & Distance == 100) %>%
@@ -241,8 +289,12 @@ filter(swim, Type == "L" & Distance == 100) %>%
   ) +
   labs(x = "Style of swimming", y = "Mean time in seconds for 100m") +
   theme_bw()
+```
 
-
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
 #Mean time in seconds (histogram), best time in seconds (points) ,
 #200 m, Males and Females are drawn separately
 filter(swim, Type == "L" & Distance == 200) %>%
@@ -261,8 +313,12 @@ filter(swim, Type == "L" & Distance == 200) %>%
   ) +
   labs(x = "Style of swimming", y = "Mean time in seconds for 200m") +
   theme_bw()
+```
 
-
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
 #Mean time in seconds (histogram), best time in seconds (points) ,
 #400 m, Males and Females are drawn separately
 filter(swim, Type == "L" & Distance == 400) %>%
@@ -282,16 +338,20 @@ filter(swim, Type == "L" & Distance == 400) %>%
   labs(x = "Style of swimming", y = "Mean time in seconds for 400m") +
   theme_bw()
 
-
 ```
-Conclusion: We see that boy show better results though free style allow girls to minimize the  gap.
-In terms of of age groups distribution Free style works better for time results though NKB has at least two exceptional swimmers on back.  
 
-Now let us see box plots (best) time per Style, both genders together, 100m  (very popular distance!)
+**Conclusion:** We can conclude that male swimmers show better results, though Free style allows girls to minimize the gap on 50m and on 200m.
+
+Free style appears to be the fastest on all distances, with the partial exception of 200 m - male swimmers show better average time there.
+
+### Minimal times per style on 100m (the genders are not separated)
+
 ```{r}
 #| echo: false
 #| message: false
 #| warning: false
+
+
 
 #Best time per Style, both genders together, 100m
 filter(swim, Type == "L" & Distance == 100) %>%
@@ -307,47 +367,61 @@ filter(swim, Type == "L" & Distance == 100) %>%
 
 ```
 
-And below the distribution of swimmers' results for various distances is presented.
+**Conclusion:** Free style allows the best performance. In 11-11 and 14-14 age groups,, Back style has very close minimal time to Free style.
+
+### Distribution of swimmers' results for 50m,100m,200m
 
 ```{r}
 #| echo: false
 #| message: false
 #| warning: false
+
 
 filter(swim, Type == "L" & as.numeric(as.character(Distance)) < 210) %>%
   ggplot(aes(x = Distance, y = Seconds, color = Style)) +
   geom_boxplot() +
-  labs(x = "Distance", y = "Times (faster is better)") +
+  labs(x = "Distance", y = "Performance Time") +
   theme_bw()
-
-
-filter(swim,
-       Type == "L" &
-         as.numeric(as.character(Distance)) > 210 &
-         as.numeric(as.character(Age)) > 14) %>%
-  ggplot(aes(x = Distance, y = Seconds, color = Gender)) +
-  geom_boxplot() +
-  labs(x = "Distance", y = "Times (faster is better)") +
-  theme_bw()
-
-
-filter(swim,
-       Type == "L" &
-         as.numeric(as.character(Distance)) < 210 &
-         as.numeric(as.character(Age)) < 11) %>%
-  ggplot(aes(x = Distance, y = Seconds, color = Gender)) +
-  geom_boxplot() +
-  labs(x = "Distance", y = "Times (faster is better)") +
-  theme_bw()
-
- 
 ```
 
-Clustering based on the best results. All results are normalized first within the distance&style. Of course we can cluster swimmers within specific age group or oone gender but let us see who appers in the most productive group of all ages and both genders.
+Conclusion: We plotted box plots for only three, the most popular distances among swimmers of all age groups. Fly style on 200m was assigned only to 19 swimmers, which may explain the distribution of time results.
+
+### Time depending on gender and distance (among all styles)
+
 ```{r}
 #| echo: false
 #| message: false
 #| warning: false
+
+filter(swim,
+       Type == "L" &
+         as.numeric(as.character(Distance)) > 0 &
+         as.numeric(as.character(Age)) > 0) %>%
+  ggplot(aes(x = Distance, y = Seconds, color = Gender)) +
+  geom_boxplot() +
+  labs(x = "Distance", y = "Performance Time") +
+  theme_bw()
+
+```
+
+**Conclusion:** Male swimmers show better average and minimal results. The difference on 50m is not substantial.
+
+## Part 2: Clustering
+
+**Clustering based on the best results. All results are scaled first within the distance and style.**
+
+The following test shows who appears in the most productive group among all ages and both genders.
+
+We scale results within each combination of style and distance such that the mean is zero and the variance is 1. Such scaling allows to compare performance of swimmers even if the data set does not contain records for the same style and distance combination. (Other scaling may be considered as well - we picked that one as it is widely used for scaling test and exam results.)
+
+We perform K-means clustering method with K=5. Each swimmer is described by two numbers: minimal scaled time and first quartile Q1 of all available scaled time results.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: true
+#| results: 'asis'
 
 #Since we need to repeat clustering and vizualization several times, we will make a simple very specialized function for our reports
 
@@ -396,13 +470,19 @@ ggplot(swim_wide_sc, aes(
   theme_bw()
  
 ```
-The table below compares best (minimal) time and Q1 for combinations of distance&style
 
-```{r, dev='png'}
+**Conclusion:** Cluster 1 (red points) represents the swimmers with the best performance (based on minimal times and first quartiles.)
+
+**Age and gender structure of Cluster 1:**
+
+```{r}
 #| echo: false
 #| message: false
 #| warning: false
+#| results: 'asis'
 
+
+#The table below compares best (minimal) time and Q1 for combinations of distance&style
 # numbers of rows that appeared in the first cluster
 rows_cluster1 <- which(sorted_labels == 1)
 
@@ -416,24 +496,32 @@ tab <- table(swim_wide_cluster1$Gender, swim_wide_cluster1$AgeGroup)
 tab_df <- as.data.frame.matrix(tab)
 tab_df <- tibble::rownames_to_column(tab_df, var = "Gender")
 
-# Render with gt
-tab_df %>%
+# render and display using gt
+tab <- tab_df %>%
   gt() %>%
   tab_header(title = "Swimmer Count in Cluster 1 by Gender and Age Group")
-s_all <- summary(swim_wide)
-s_all <- unlist(s_all)[c(1, 2), -c(1, 2, 3, 4)]
-s_cluster <- summary(swim_wide[rows_cluster1, ])
-s_cluster <- unlist(s_cluster)[c(1, 2), -c(1, 2, 3, 4)]
+
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
 
  
 ```
 
-And below a more technical table that shows normalized minimal values and first quartils amond all swimmers and among the Cluster 1.
+Conclusion: There are significantly more male swimmers, though some female swimmers are present in Cluster 1. The names of swimmers who appeared in Cluster 1 are available based on the data set, but those names are not listed here.
 
 ```{r}
-#| echo: false
 #| message: false
 #| warning: false
+#| include: false
+
+
+#Here is one more table containing some normalized data statistics: it shows normalized minimal values and first quartils among all swimmers and among the Cluster 1. So we may be sure Cluster 1 picks the swimmers with better entry times.
+
+s_all <- summary(swim_wide)
+s_all <- unlist(s_all)[c(1, 2), -c(1, 2, 3, 4)]
+s_cluster <- summary(swim_wide[rows_cluster1, ])
+s_cluster <- unlist(s_cluster)[c(1, 2), -c(1, 2, 3, 4)]
 
 # summary table will contain stats for all swimmers and for cluster 1
 summary_table <- rbind(s_all, s_cluster)
@@ -448,3 +536,611 @@ summary_table_t <- tibble::rownames_to_column(as.data.frame(summary_table_t), va
 gt(as_tibble(summary_table_t))
 ```
 
+## Part 3: Hypothesis Testing
+
+## 100m Free style
+
+**We check if the gender affects children's time results. To do that, we may consider testing hypotheses on equality of means and first quartiles.**
+
+-   Group 1: Time results of female swimmers in100m Free style.
+
+-   Group 2: Time results of male swimmers in 100m Free style.
+
+Student's t-test or Welch's t-test could work here, but we need to check if the data samples pass the normal distribution test - we apply Shapiro test.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: 'asis'
+
+
+#checking if the samples (Male/Female time results on 100Free) belong to normal distributions
+#hist(as.matrix(subset(swim_wide, Gender == "Male" ,c("100Free"))))
+
+#---------------------------------------------------
+#Shapiro normality test: if p<0.1 we consider accptable to assume the samples are from normal distributions
+# shapiro.test(as.matrix(subset(swim_wide, Gender == "Female" ,c("100Free"))))
+# shapiro.test(as.matrix(subset(swim_wide, Gender == "Male" ,c("100Free"))))
+#below nicely formatted table
+
+
+# Run Shapiro tests
+female_data <- subset(swim_wide, Gender == "Female", select = "100Free") |> as.matrix()
+male_data   <- subset(swim_wide, Gender == "Male", select = "100Free") |> as.matrix()
+
+female_test <- shapiro.test(female_data)
+male_test   <- shapiro.test(male_data)
+
+# Prepare data frame with results
+shapiro_df <- data.frame(
+  Gender         = c("Female", "Male"),
+  W_Statistic    = round(c(female_test$statistic, male_test$statistic), 3),
+  p_value        = signif(c(female_test$p.value, male_test$p.value), 4),
+  Interpretation = c(
+    if (female_test$p.value < 0.05) "Not normal (p < 0.05)" else "Approximately normal (p ≥ 0.05)",
+    if (male_test$p.value < 0.05)   "Not normal (p < 0.05)" else "Approximately normal (p ≥ 0.05)"
+  )
+)
+
+# Create formatted gt table
+tab<- shapiro_df |>
+  gt() |>
+  tab_header(title = "Shapiro-Wilk Normality Test — 100Free by Gender") |>
+  fmt_number(columns = c(W_Statistic, p_value), decimals = 3)
+
+
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
+
+
+#------------------------------------
+```
+
+**Conclusion:** It appears based on Shapiro test that both samples do not satisfy the normal distribution test.
+
+### Choice of test.
+
+In our case:
+
+-   there are exactly two groups;
+
+-   the groups are independent (not related);
+
+-   the distribution is not normal;
+
+-   we need to test the equality of means and equality of the first quartiles;
+
+Based on the list of conditions, we apply **Mann–Whitney U** test and **permutation** test.
+
+For **Mann–Whitney U** test, we make assumptions: both groups are samples of values of two continuous random variables, the random variables have the same type (shape) of distribution, but maybe different parameter/s (mean in our case).
+
+**Permutation** test allows us to test also equality of means and of Q1s. It requires the assumption that data points are interchangeable under the null hypothesis.
+
+### **Before testing hypothesis let us see statistics and distribution of both groups.**
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: asis
+
+
+# # mean and variance for Female swimmers on 100Free
+# mean(subset(swim_wide, Gender == "Female")$`100Free`, na.rm = TRUE)
+# var(subset(swim_wide, Gender == "Female")$`100Free`, na.rm = TRUE)
+# # mean and variance for Male swimmers on 100Free
+# mean(subset(swim_wide, Gender == "Male")$`100Free`, na.rm = TRUE)
+# var(subset(swim_wide, Gender == "Male")$`100Free`, na.rm = TRUE)
+#--------------------------------------------
+#means and variances nicely formatted
+# Extract and compute statistics
+female_100Free <- subset(swim_wide, Gender == "Female")$`100Free`
+male_100Free   <- subset(swim_wide, Gender == "Male")$`100Free`
+
+# Compute values
+female_mean <- mean(female_100Free, na.rm = TRUE)
+female_var  <- var(female_100Free, na.rm = TRUE)
+female_q1<-quantile(female_100Free, probs = 0.25,na.rm = TRUE)
+male_mean   <- mean(male_100Free, na.rm = TRUE)
+male_var    <- var(male_100Free, na.rm = TRUE)
+male_q1<-quantile(male_100Free, probs = 0.25,na.rm = TRUE)
+
+
+# Build a summary data frame
+summary_df <- data.frame(
+  Statistic = c("Mean", "Variance", "Q1"),
+  Female = c(female_mean, female_var,female_q1),
+  Male   = c(male_mean, male_var,male_q1)
+)
+
+# Display as gt table
+tab<-summary_df |>
+  gt() |>
+  tab_header(
+    title = "Summary Statistics for 100Free by Gender"
+  ) |>
+  fmt_number(
+    columns = c(Female, Male),
+    decimals = 3
+  )
+
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
+
+#---------------------------------------------
+# histograms so we see the type of distribution
+ggplot(swim_wide, aes(x = `100Free`, color = Gender, fill = Gender)) +
+  geom_histogram(binwidth = 5, alpha = 0.5, position = "identity") +
+  labs(
+    title = "Histogram of Female and Male Performance in 100 Free",
+    x = "Time (seconds)",
+    y = "Count"
+  ) +
+  theme_bw()
+
+
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| include: false
+#| paged-print: true
+#| results: asis
+
+#do not include
+#number of non NA time results on 100Free for females so we see if the samples sizes are adequate
+
+#number of non NA time results on 100Free for males
+sum(!is.na(subset(swim_wide, Gender == "Female")$`100Free`))
+#number of non NA time results on 100Free for males
+sum(!is.na(subset(swim_wide, Gender == "Male")$`100Free`))
+
+
+#---------------------------------------------
+#testing hypothesis H0: mean of males time results on 100Free = mean of female results 
+
+# modified Student's t-test (there is no requirement on variances be equal) on two samples: Male vs Female swimmers on 100Free
+# H0: mu_Males =mu_Females on 100Free
+# H1: mu_Males != mu_Females on 100Free
+tm<-swim_wide$'100Free'
+gen<-swim_wide$Gender
+
+#t-test and output of it's result
+the_test<-t.test(tm ~ gen, var.equal = FALSE, na.rm = TRUE)
+
+# Extract results for nice table output
+test_df <- data.frame(
+  Statistic = c("t value", "df", "p-value", "Mean of Group1(Females)", "Mean of Group2(Males)", 
+                "95% CI lower", "95% CI upper"),
+  Value = c(
+    round(the_test$statistic, 3),
+    round(the_test$parameter, 2),
+    signif(the_test$p.value, 4),
+    round(the_test$estimate[1], 3),
+    round(the_test$estimate[2], 3),
+    round(the_test$conf.int[1], 3),
+    round(the_test$conf.int[2], 3)
+  )
+)
+
+#  formatted gt table
+test_df |>
+  gt() |>
+  tab_header(title = "Welch Two Sample t-test Results") |>
+  fmt_number(columns = "Value", decimals = 3)
+
+
+
+
+```
+
+### Permutation test, 100m Free style
+
+We test two pair of hypotheses: on equality of means and on equality of first quartiles.
+
+-   The null hypothesis is $H_0=\{\mu_f=\mu_m\}$ and the alternative hypothesis is $H_1=\{\mu_f \not =\mu_m\}$, where $\mu_f$ is mean of time results in 100m Free of female swimmers, $\mu_m$ is mean of time results in 100m Free of male swimmers.
+
+-   The null hypothesis is $H_0=\{Q1_f=Q1_m\}$and the alternative hypothesis is $H_1=\{Q1_f \not =Q1_m\}$, where $Q1_f$ is first quartile of time results in 100m Free of female swimmers, $Q1_m$ is first quartile.of time results in 100m Free of male swimmers.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: true
+#| results: asis
+
+# Permutation test on equality of Q1 for time results of female swimmers and male swimmers
+group1<-subset(swim_wide, Gender == "Female",c("100Free"))
+group2<-subset(swim_wide, Gender == "Male",c("100Free"))
+
+#Permutation test
+#absolute value of the difference of the first quartiles for each sample
+obs_diff <- abs(quantile(group1, 0.25,na.rm=TRUE) - quantile(group2, 0.25,na.rm=TRUE))
+
+# Permutation test
+combined <- bind_rows(group1, group2)
+n1 <- nrow(group1)
+n2 <- nrow(group2)
+
+n_perm <- 10000
+
+
+perm <- sample(as.vector(as.matrix(combined)),n1+n2)
+
+perm_diffs <- replicate(n_perm, {
+  perm <- sample(as.vector(as.matrix(combined)),n1+n2)
+  g1 <- perm[1:n1]
+  g2 <- perm[(n1 + 1):(n1+n2)]
+  abs(quantile(g1, 0.25,na.rm=TRUE) - quantile(g2, 0.25,na.rm=TRUE))
+})
+
+# p-value
+p_value <- mean(perm_diffs >= obs_diff)
+if (p_value==0) 
+{  p_value<-mean(c(perm_diffs,obs_diff)>= obs_diff)
+}
+
+cat(sprintf("
+\\begin{quote}
+P-value received on permutation test for equality of Q1s\\textquotesingle s: \\textbf{%.4f}
+\\end{quote}
+", p_value))
+obs_diff <- abs(quantile(group1, 0.5,na.rm=TRUE) - quantile(group2, 0.5,na.rm=TRUE))
+
+perm_diffs <- replicate(n_perm, {
+  perm <- sample(as.vector(as.matrix(combined)),n1+n2)
+  g1 <- perm[1:n1]
+  g2 <- perm[(n1 + 1):(n1+n2)]
+  abs(quantile(g1, 0.5,na.rm=TRUE) - quantile(g2, 0.5,na.rm=TRUE))
+})
+
+p_value <- mean(perm_diffs >= obs_diff)
+if (p_value==0) 
+{  p_value<-mean(c(perm_diffs,obs_diff)>= obs_diff)
+}
+
+cat(sprintf("
+\\begin{quote}
+P-value received on permutation test for equality of means\\textquotesingle s: \\textbf{%.4f}
+\\end{quote}
+", p_value))
+
+```
+
+**Conclusion:** In both cases p-values are small and in both cases the null hypothesis H0 are rejected.
+
+### Mann–Whitney U test, 100m Free style
+
+We test hypotheses:
+
+-   The null hypothesis is $H_0=\{\mu_f=\mu_m\}$ and the alternative hypothesis is $H_1=\{\mu_f \not =\mu_m\}$, where $\mu_f$ equls mean of time results in 100m Free of female swimmers, $\mu_m$ equals mean of time results in 100m Free of male swimmers.
+
+```{r}
+#| echo: false
+#| results: 'asis'
+#| message: false
+#| warning: false
+
+
+# Run Wilcoxon rank-sum test
+test_result <- wilcox.test(female_100Free, male_100Free, exact = FALSE)
+
+# Prepare data frame with results
+wilcox_df <- data.frame(
+  `Test`         = "Wilcoxon Rank-Sum Test",
+  `W Statistic`  = round(test_result$statistic, 3),
+  `p-value`      = signif(test_result$p.value, 4),
+  `Interpretation` = if (test_result$p.value < 0.05) 
+                       "Significant difference (p < 0.05)" 
+                     else 
+                       "No significant difference (p ≥ 0.05)"
+)
+
+# Format as gt table
+tab <- wilcox_df |>
+  gt() |>
+  tab_header(title = "Wilcoxon Rank-Sum Test — 100Free by Gender") |>
+  fmt_number(columns = c(`W.Statistic`, `p.value`), decimals = 3)
+
+# Convert to LaTeX and pin table
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+
+cat(latex_code)
+
+
+```
+
+**Conclusion:** The null hypothesis is rejected by Mann–Whitney U test.
+
+## hypotheses testing based on scaled time results
+
+All available time results were first scaled depending on distance and style (see description of scaling in **Part 2**). The scheme of testing is analogous to the presented below but now we consider all and scaled time results.
+
+-   Group 1: Scaled time results of female swimmers.
+
+-   Group 2: Scaled time results of male swimmers.
+
+We check if the gender affects children swimmers' performance. To do that, we may consider testing hypotheses on the equality of means and of the first quartiles.
+
+Student's t-test or Welch's t-test could work here. First we need to check if the data samples pass the normal distribution test (we apply Shapiro test.)
+
+### **Statistics of two groups, scaled times**
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: asis
+
+
+# means and variances for both samples (all normalized (the normalization wad done above within each combination style&distance) time results for female swimmers and the similarly prepared results for male swimmers)
+
+#--------------------------------------------
+#nice output for two groups means and variances
+
+
+swim_wide_sc$Gender<-swim_wide$Gender
+
+group1 <- as.numeric(as.matrix(subset(swim_wide_sc, Gender == "Female")))
+group2 <- as.numeric(as.matrix(subset(swim_wide_sc, Gender == "Male")))
+
+group1_mean <- mean(group1, na.rm = TRUE)
+group1_var  <- var(group1, na.rm = TRUE)
+group1_q1<-quantile(group1, probs = 0.25,na.rm = TRUE)
+
+group2_mean <- mean(group2, na.rm = TRUE)
+group2_var  <- var(group2, na.rm = TRUE)
+group2_q1<-quantile(group2, probs = 0.25,na.rm = TRUE)
+
+
+# Create a summary data frame
+summary_df <- data.frame(
+  Statistic = c("Mean", "Variance", "Q1"),
+  Group1 = c(group1_mean, group1_var,group1_q1),
+  Group2 = c(group2_mean, group2_var,group2_q1)
+)
+
+# Create a gt table
+tab<-summary_df %>%
+  gt() %>%
+  tab_header(
+    title = "Summary Statistics for Females(Group1) and Males(Group2)"
+  ) %>%
+  fmt_number(
+    columns = c(Group1, Group2),
+    decimals = 3
+  )
+
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
+
+# #---------------------------------------------
+# #histograms so we see the type of distribution
+# ggplot(swim_wide, aes(x = `100Free`, color = Gender, fill = Gender)) +
+#   geom_histogram(binwidth = 5, alpha = 0.5, position = "identity") +
+#   labs(
+#     title = "Histogram of Female and Male Performance based on scaled time results",
+#     x = "Time (scaled)",
+#     y = "Count"
+#   ) +
+#   theme_bw()
+
+```
+
+```{r}
+#| eval: false
+#| message: false
+#| warning: false
+#| include: false
+
+# not included
+#------------------------------------
+#t-test and nice output
+
+# Perform t-test
+the_test <- t.test(group1, group2, var.equal = FALSE, na.rm = TRUE)
+
+# Extract relevant results
+test_df <- data.frame(
+  Statistic = c("t value", "df", "p-value", "Mean of Group1(Females)", "Mean of Group2(Males)", 
+                "95% CI lower", "95% CI upper"),
+  Value = c(
+    round(the_test$statistic, 3),
+    round(the_test$parameter, 2),
+    signif(the_test$p.value, 4),
+    round(the_test$estimate[1], 3),
+    round(the_test$estimate[2], 3),
+    round(the_test$conf.int[1], 3),
+    round(the_test$conf.int[2], 3)
+  )
+)
+
+#  formatted gt table
+test_df |>
+  gt() |>
+  tab_header(title = "Welch Two Sample t-test Results") |>
+  fmt_number(columns = "Value", decimals = 3)
+
+
+#---------------------------------------
+
+
+
+
+```
+
+### Shapiro test, scaled times
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| results: asis
+
+# Testing on normal distribution
+
+# Run Shapiro tests with nice output
+#shapiro.test(group1)
+#shapiro.test(group2)
+swim_wide_sc$Gender<-swim_wide$Gender
+
+group1 <- as.numeric(as.matrix(subset(swim_wide_sc, Gender == "Female")))
+group2 <- as.numeric(as.matrix(subset(swim_wide_sc, Gender == "Male")))
+
+female_test <- shapiro.test(group1)
+male_test   <- shapiro.test(group2)
+
+# Prepare data frame with results
+shapiro_df <- data.frame(
+  Gender         = c("Female", "Male"),
+  W_Statistic    = round(c(female_test$statistic, male_test$statistic), 3),
+  p_value        = signif(c(female_test$p.value, male_test$p.value), 4),
+  Interpretation = c(
+    if (female_test$p.value < 0.05) "Not normal (p < 0.05)" else "Approximately normal (p ≥ 0.05)",
+    if (male_test$p.value < 0.05)   "Not normal (p < 0.05)" else "Approximately normal (p ≥ 0.05)"
+  )
+)
+
+# Create formatted gt table
+tab<-shapiro_df |>
+  gt() |>
+  tab_header(title = "Shapiro-Wilk Normality Test by Gender") |>
+  fmt_number(columns = c(W_Statistic, p_value), decimals = 3)
+
+latex_code <- as.character(as_latex(tab))
+latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+cat(latex_code)
+
+
+#------------------------------------
+```
+
+**Conclusion:** Scaled time results do not pass Shapiro test on normal distribution.
+
+### Permutation test, scaled times
+
+We test two pair of hypotheses: on equality of means and on equality of first quartiles.
+
+-   The null hypothesis is $H_0=\{\mu_f = \mu_m\}$ and the alternative hypothesis is $H_1=\{\mu_f \not = \mu_m\}$, where $\mu_f$=mean of all scaled time results of female swimmers, \$\\mu_m \$ =mean of all scaled time results of male swimmers.
+
+-   The null hypothesis is $H_0=\{Q1_f=Q1_m\}$ and the alternative hypothesis is $H_1=\{Q1_f\not =Q1_m\}$, where $Q1_f$=first quartile of all scaled time results of female swimmers, $Q1_m$=first quartile of all scaled time results of male swimmers.
+
+    ### Results:
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| paged-print: true
+#| results: 'asis'
+
+# We have to use a test working for non-normal samples
+# Let us use permutation test on means and on the first quartiles (Q1)
+
+#Permutation test
+#absolute value of the difference of the first quartiles for each sample
+obs_diff <- abs(quantile(group1, 0.25,na.rm=TRUE) - quantile(group2, 0.25,na.rm=TRUE))
+#obs_diff<-0.1
+
+# Permutation test
+combined <- c(group1, group2)
+n1 <- length(group1)
+n2 <- length(group2)
+
+n_perm <- 1000
+
+
+set.seed(76)
+
+perm_diffs <- replicate(n_perm, {
+  perm <- sample(combined,n1+n2)
+  g1 <- perm[1:n1]
+  g2 <- perm[(n1 + 1):(n1+n2)]
+  abs(quantile(g1, 0.25,na.rm=TRUE) - quantile(g2, 0.25,na.rm=TRUE))
+})
+
+# p-value
+p_value <- mean(perm_diffs>= obs_diff)
+if (p_value==0) 
+{  p_value<-mean(c(perm_diffs,obs_diff)>= obs_diff)
+  }
+
+cat(sprintf("
+\\begin{quote}
+P-value received on permutation test for equality of Q1s\\textquotesingle s: \\textbf{%.4f}
+\\end{quote}
+", p_value))
+
+obs_diff <- abs(quantile(group1, 0.5,na.rm=TRUE) - quantile(group2, 0.5,na.rm=TRUE))
+
+perm_diffs <- replicate(n_perm, {
+  perm <- sample(as.vector(as.matrix(combined)),n1+n2)
+  g1 <- perm[1:n1]
+  g2 <- perm[(n1 + 1):(n1+n2)]
+  abs(quantile(g1, 0.5,na.rm=TRUE) - quantile(g2, 0.5,na.rm=TRUE))
+})
+
+p_value <- mean(perm_diffs>= obs_diff)
+if (p_value==0) 
+{  p_value<-mean(c(perm_diffs,obs_diff)>= obs_diff)
+}
+
+cat(sprintf("
+\\begin{quote}
+P-value received on permutation test for equality of means\\textquotesingle s: \\textbf{%.4f}
+\\end{quote}
+", p_value))
+```
+
+**Conclusion:** Both null hypothesis are rejected by permutation test.
+
+### Mann–Whitney U test, scaled times
+
+We test hypotheses:
+
+-   The null hypothesis is $H_0=\{\mu_f = \mu_m\}$ and the alternative hypothesis is $H_1=\{\mu_f \not = \mu_m\}$, where $\mu_f$ = mean of all scaled time results of female swimmers, $\mu_m$=mean of all scaled time results of male swimmers.
+
+    ```{r}
+    #| echo: false
+    #| message: false
+    #| warning: false
+    #| results: asis
+
+    # Run Wilcox test
+    test_result <- wilcox.test(group1, group2, exact = FALSE)
+
+    # Prepare data frame with results
+    wilcox_df <- data.frame(
+      `Test`         = "Wilcoxon Rank-Sum Test",
+      `W Statistic`  = round(test_result$statistic, 3),
+      `p-value`      = signif(test_result$p.value, 4),
+      `Interpretation` = if (test_result$p.value < 0.05) 
+                           "Significant difference (p < 0.05)" 
+                         else 
+                           "No significant difference (p ≥ 0.05)"
+    )
+
+    # Format as gt table
+    tab <- wilcox_df |>
+      gt() |>
+      tab_header(title = "Wilcoxon Rank-Sum Test — scaled times by Gender") |>
+      fmt_number(columns = c(`W.Statistic`, `p.value`), decimals = 3)
+
+    # Convert to LaTeX and pin table
+    latex_code <- as.character(as_latex(tab))
+    latex_code <- gsub("\\\\begin\\{table\\}", "\\\\begin{table}[H]", latex_code)
+
+    cat(latex_code)
+
+
+    ```
+
+**Conclusion:** The null hypothesis is rejected by Mann–Whitney U test.
+
+## 
